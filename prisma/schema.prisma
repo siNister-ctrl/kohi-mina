@@ -1,0 +1,172 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  CASHIER
+  BARISTA
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  SERVED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  GCASH
+}
+
+enum PaymentStatus {
+  UNPAID
+  PENDING
+  PAID
+  FAILED
+}
+
+enum StockAlertLevel {
+  NORMAL
+  LOW
+  CRITICAL
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(CASHIER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Table {
+  id        Int      @id @default(autoincrement())
+  number    Int      @unique
+  name      String
+  capacity  Int      @default(4)
+  isActive  Boolean  @default(true)
+  qrCode    String?
+  orders    Order[]
+  createdAt DateTime @default(now())
+}
+
+model Category {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  products    Product[]
+  createdAt   DateTime  @default(now())
+}
+
+model Product {
+  id          Int           @id @default(autoincrement())
+  name        String
+  description String?
+  price       Float
+  imageUrl    String?
+  isAvailable Boolean       @default(true)
+  categoryId  Int
+  category    Category      @relation(fields: [categoryId], references: [id])
+  orderItems  OrderItem[]
+  ingredients ProductIngredient[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Ingredient {
+  id             Int                  @id @default(autoincrement())
+  name           String               @unique
+  unit           String
+  currentStock   Float                @default(0)
+  lowStockAlert  Float                @default(10)
+  criticalAlert  Float                @default(5)
+  alertLevel     StockAlertLevel      @default(NORMAL)
+  products       ProductIngredient[]
+  transactions   InventoryTransaction[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+}
+
+model ProductIngredient {
+  id           Int        @id @default(autoincrement())
+  productId    Int
+  ingredientId Int
+  quantity     Float
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, ingredientId])
+}
+
+model InventoryTransaction {
+  id           Int        @id @default(autoincrement())
+  ingredientId Int
+  type         String     // "DEDUCT" | "RESTOCK"
+  quantity     Float
+  note         String?
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  createdAt    DateTime   @default(now())
+}
+
+model Order {
+  id              Int           @id @default(autoincrement())
+  orderNumber     String        @unique
+  tableId         Int
+  table           Table         @relation(fields: [tableId], references: [id])
+  status          OrderStatus   @default(PENDING)
+  paymentMethod   PaymentMethod @default(CASH)
+  paymentStatus   PaymentStatus @default(UNPAID)
+  subtotal        Float
+  total           Float
+  notes           String?
+  estimatedMinutes Int          @default(15)
+  items           OrderItem[]
+  payment         Payment?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model OrderItem {
+  id          Int     @id @default(autoincrement())
+  orderId     Int
+  productId   Int
+  quantity    Int
+  price       Float
+  size        String? // Small, Medium, Large
+  sugarLevel  String? // 0%, 25%, 50%, 75%, 100%
+  addOns      String? // JSON string of add-ons
+  notes       String?
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product @relation(fields: [productId], references: [id])
+}
+
+model Payment {
+  id              Int           @id @default(autoincrement())
+  orderId         Int           @unique
+  method          PaymentMethod
+  status          PaymentStatus @default(UNPAID)
+  amount          Float
+  referenceCode   String?
+  paymongoId      String?
+  paymongoUrl     String?
+  proofImageUrl   String?
+  paidAt          DateTime?
+  order           Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
